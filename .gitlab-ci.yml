@@ -1,0 +1,35 @@
+image: ubuntu:latest
+
+before_script:
+  - echo $AWS_ACCESS_KEY
+  - apt-get update -y  # Updating the Ubuntu Docker instance.
+  - apt install -y python python-pip
+  - python -V  # Print out python version for debugging.
+  - apt install -y zip jq
+  - pip install awscli --upgrade --user
+  - export PATH=~/.local/bin:$PATH # Required for awscli.
+  - aws --version  # Print out aws cli version for debugging.
+
+stages:
+  - deploy
+
+variables:
+  LAMBDA_NAME: 'helloWorld'   # Replace it with the name of aws lambda function you want.
+  S3_BUCKET: 'pedro-hello-world-lambda'   # Replace it with the name of Bucket that will hold the zip code.
+  LAMBDA_RUNTIME: 'nodejs8.10'
+  LAMBDA_ARN: 'arn:aws:iam::988443170952:role/service-role/helloWorld-role-f58nnfcn' # ARN associated with this lambda function.
+  LAMBDA_HANDLER: 'index.handler'  # This is default lambda handler.
+
+deploy:
+  stage: deploy
+  
+  only:
+  - master   # We will run the CD only when something is going to change in master branch.
+
+  script:
+  - zip -r code.zip . -x \*.js *.git*   # Archive the code repository.
+  - aws s3 cp code.zip s3://$S3_BUCKET/code.zip # Upload archive into s3.
+  - aws lambda update-function-code --function-name $LAMBDA_NAME --zip-file fileb://code.zip || aws lambda create-function --function-name $LAMBDA_NAME --runtime $LAMBDA_RUNTIME --role $LAMBDA_ARN --handler $LAMBDA_HANDLER --code S3Bucket=$S3_BUCKET,S3Key=code.zip --memory-size 1024
+
+  environment:
+    name: master
